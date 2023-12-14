@@ -2,7 +2,9 @@ import 'dotenv/config'
 import express from 'express';
 import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
-import md5 from 'md5';
+import bcrypt from 'bcrypt';
+
+const saltRounds = 10;
 
 const app = express();
 const port = 3000;
@@ -37,28 +39,32 @@ app.get('/register', async function (req, res) {
 
 app.post("/register", function (req, res) {
     const { username, password } = req.body;
-    if (!username || !password) {
-        return res.redirect("/register");
-    }
-    const newUser = new User({
-        email: username,
-        password: md5(password)
-    });
-    newUser.save()
-        .then(() => {
-            res.render("secrets.ejs");
-        })
-        .catch((err) => {
-            console.error(err);
-            res.status(500).send("Internal Server Error");
+    bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+        if (!username || !password) {
+            return res.redirect("/register");
+        }
+        const newUser = new User({
+            email: username,
+            password: hash
         });
+        newUser.save()
+            .then(() => {
+                res.render("secrets.ejs");
+            })
+            .catch((err) => {
+                console.error(err);
+                res.status(500).send("Internal Server Error");
+            });
+    });
+    
 });
 
 app.post("/login", async function (req, res) {
     const { username, password } = req.body;
     try {
         const foundUser = await User.findOne({ email: username });
-        if (foundUser && foundUser.password === md5(password)) {
+        const isPasswordValid = await bcrypt.compare(password, foundUser.password);
+        if (isPasswordValid) {
             res.render("secrets.ejs");
         } else {
             res.redirect("/login");
@@ -68,6 +74,5 @@ app.post("/login", async function (req, res) {
         res.status(500).send("Internal Server Error");
     }
 });
-
 
 app.listen(port, () => console.log(`Server running on port ${port}`));
